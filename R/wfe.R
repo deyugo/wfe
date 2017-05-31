@@ -288,9 +288,18 @@ wfe <- function (formula, data, treat = "treat.name",
         }
         
         
+<<<<<<< HEAD
+        ## Remove observations with zero weights
+        zero.ind <- which(data$W.it==0)
+        if(length(zero.ind)>0){
+          data <- data[-zero.ind, ]
+        }
+        n.units <- length(unique(data$u.index))
+=======
 
 
 ### Demean based on the weights
+>>>>>>> d6da253efab70d46c450a4b2f27e2f27bc8b3f88
         
         wdm.Data <- mf.sorted
         
@@ -306,6 +315,157 @@ wfe <- function (formula, data, treat = "treat.name",
 
         ## excluding zero weights data for weighted fixed effect
         
+<<<<<<< HEAD
+        ## e <- environment()
+        ## save(file = "temp.RData", list = ls(), env = e)
+        
+        for(k in 1:length(variables)){
+          v <- variables[k]
+          cmd1 <- paste("demean.unit <- tapply(data$", v, ", as.factor(data$u.index), mean, na.rm=T)", sep="")
+          cmd2 <- paste("demean.time <- tapply(data$", v, ", as.factor(data$t.index), mean, na.rm=T)", sep="")
+          cmd3 <- paste("demean.all <- mean(data$", v, ", na.rm=T)", sep="")
+          cmd4 <- paste("demean.units <- demean.unit[match(data$u.index, names(demean.unit))]", sep="")
+          cmd5 <- paste("demean.times <- demean.time[match(data$t.index, names(demean.time))]", sep="")
+          cmd6 <- paste("demean.alls <- rep(demean.all, times=obs.counts)", sep="")
+          cmd7 <- paste("DemeanedMatrix[,k] <- data$", v, "- demean.units - demean.times + demean.alls", sep="")
+          
+          eval(parse(text=cmd1))
+          eval(parse(text=cmd2))
+          eval(parse(text=cmd3))
+          eval(parse(text=cmd4))
+          eval(parse(text=cmd5))
+          eval(parse(text=cmd6))
+          eval(parse(text=cmd7))
+        }
+        ## verify: should return the same results (checked!)
+        ## lm(y~ as.factor(u.index) + as.factor(t.index) + tr+x1+x2, data=data)
+        ## lm(DemeanedMatrix[,1]~ -1 + DemeanedMatrix[,-1])
+        
+        ## standard error calculation
+        unique.units <- unique(data$u.index)
+        U <- matrix(0, nrow=length(x.vars), ncol=length(x.vars))
+        V <- matrix(0, nrow=length(x.vars), ncol=length(x.vars))
+        Beta <- as.matrix(coef.wls)
+        
+        for(g in 1:length(unique.units)){
+          unit.g <- unique.units[g]
+          Y.dm <- DemeanedMatrix[which(data$u.index==unit.g),1]
+          X.dm <- DemeanedMatrix[which(data$u.index==unit.g),-1]
+          if(length(which(data$u.index==unit.g))==1){
+            W.diag <- as.matrix(data$W.it[data$u.index==unit.g])
+            Y.dm <- as.matrix(Y.dm)
+            X.dm <- t(as.matrix(X.dm))
+          } else {
+            W.diag <- diag(data$W.it[data$u.index==unit.g])
+          }
+          
+          U.i <- t(X.dm) %*% W.diag %*% X.dm
+          U <- U + U.i
+          V.i <- t(X.dm) %*% W.diag %*% (Y.dm-X.dm %*% Beta) %*% t(Y.dm-X.dm %*% Beta) %*% W.diag %*% X.dm
+          V <- V + V.i
+        }
+        
+        ## asymptotic variance using Methods of Moments
+        inv.U <- solve(1/n.units * U)
+        V <- 1/n.units * V
+        Psi.hat.wfe <- inv.U %*% V %*% inv.U
+        
+        ## -----------------------------------------------------
+        ## vcov matrix for FE for White statistics calculation
+        ## -----------------------------------------------------
+        
+        
+        Omega.hat.fe.HAC <- OmegaHatHAC(nrow(X.hat), ncol(X.hat), data$u.index, J.u, X.hat, u.hat)
+        Omega.hat.fe.HAC <- matrix(Omega.hat.fe.HAC, nrow = ncol(X.hat), ncol = ncol(X.hat))
+        ## Omega.hat.fe.HAC <- (1/(nrow(X.hat)-J.u-J.t-p)) * Omega.hat.fe.HAC
+        Omega.hat.fe.HAC <- (1/J.u) * Omega.hat.fe.HAC
+        
+        ## Psi.hat.fe <- (nrow(X.hat)*ginv.XX.hat) %*% Omega.hat.fe.HAC %*% (nrow(X.hat)*ginv.XX.hat)
+        Psi.hat.fe <- (J.u*ginv.XX.hat) %*% Omega.hat.fe.HAC %*% (J.u*ginv.XX.hat)
+        ## garbage collection
+        rm(Omega.hat.fe.HAC)
+        
+        
+        ## -----------------------------------------------------
+        ## old code 
+        ## -----------------------------------------------------
+        
+        ## ## degrees of freedom adjustment
+        ## ## cat("degrees of freedom:", J.u, J.t, p, "\n")
+        ## df.adjust <- 1/(nrow(X.tilde)) * ((nrow(X.tilde)-1)/(nrow(X.tilde)-J.u-J.t-p+1)) * (J.u/(J.u-1))
+        
+        ## Omega.hat.HAC <- as.double(comp_OmegaHAC(c(X.tilde), e.tilde, c(X.tilde), e.tilde, dim(X.tilde)[1], dim(X.tilde)[2], data$u.index, J.u))
+        ## Omega.hat.HAC <- matrix(Omega.hat.HAC, nrow=ncol(X.tilde), ncol=ncol(X.tilde), byrow=T)
+        ## ## Omega.hat.HAC <- (1/(nrow(X.tilde)-J.u-J.t-p+1))* Omega.hat.HAC
+        ## ## Omega.hat.HAC <- (1/(nrow(X.tilde)))* Omega.hat.HAC 
+        ## ## Omega.hat.HAC <- df.adjust * Omega.hat.HAC
+        ## Omega.hat.HAC <- (1/J.u) * Omega.hat.HAC
+        
+        
+        ## ## check positive definiteness of Omega.hat.HAC
+        ## if ( sum(as.numeric(eigen(Omega.hat.HAC)$values < 0)) > 0 ) {
+        ##     ## cat ("*** Omega.hat is not positive definite ***\n")                    
+        ##     stop ("*** Omega.hat is not positive definite ***")
+        
+        ## }
+        
+        ## Omega.hat.fe.HAC <- OmegaHatHAC(nrow(X.hat), ncol(X.hat), data$u.index, J.u, X.hat, u.hat)
+        ## Omega.hat.fe.HAC <- matrix(Omega.hat.fe.HAC, nrow = ncol(X.hat), ncol = ncol(X.hat))
+        ## ## Omega.hat.fe.HAC <- (1/(nrow(X.hat)-J.u-J.t-p)) * Omega.hat.fe.HAC
+        ## Omega.hat.fe.HAC <- (1/J.u) * Omega.hat.fe.HAC
+        
+        ## ## Psi.hat.wfe <- ((nrow(X.tilde))*ginv.XX.tilde) %*% Omega.hat.HAC %*% ((nrow(X.tilde))*ginv.XX.tilde)
+        ## ## Psi.hat.fe <- (nrow(X.hat)*ginv.XX.hat) %*% Omega.hat.fe.HAC %*% (nrow(X.hat)*ginv.XX.hat)
+        ## ## Psi.hat.wfe <- (J.u*ginv.XX.tilde) %*% Omega.hat.HAC %*% (J.u*ginv.XX.tilde)
+        ## Psi.hat.fe <- (J.u*ginv.XX.hat) %*% Omega.hat.fe.HAC %*% (J.u*ginv.XX.hat)
+        
+        ## ## garbage collection
+        ## rm(Omega.hat.HAC, Omega.hat.fe.HAC)
+        ## gc()
+        
+      } else if ( (hetero.se == TRUE) & (auto.se == FALSE)) {
+        stop("Please set hetero.se == TRUE & auto.se == TRUE when you run two-way FE")
+        
+        ## 2. independence across observations but heteroskedasticity (Eq 11)
+        
+        std.error <- "Heteroscedastic Robust Standard Error"
+        
+        Omega.hat.HC <- as.double(comp_OmegaHC(c(X.tilde), e.tilde, c(X.tilde), e.tilde, dim(X.tilde)[1], dim(X.tilde)[2], data$u.index, J.u))
+        Omega.hat.HC <- matrix(Omega.hat.HC, nrow=ncol(X.tilde), ncol=ncol(X.tilde), byrow=T)
+        ## Omega.hat.HC <- (1/(nrow(X.tilde)-J.u-J.t-p+1))* Omega.hat.HC
+        Omega.hat.HC <- (1/J.u)* Omega.hat.HC                
+        
+        ## Psi.hat.wfe <- ((nrow(X.tilde))*ginv.XX.tilde) %*% Omega.hat.HC %*% ((nrow(X.tilde))*ginv.XX.tilde)
+        Psi.hat.wfe <- (J.u*ginv.XX.tilde) %*% Omega.hat.HC %*% (J.u*ginv.XX.tilde)
+        
+        ## ## alternatively calculation (don't need to invert)
+        ## Psi.hat.wfe2 <- (length(y.tilde)*ginv.XX.tilde) %*% ( (1/length(y.tilde)) * (crossprod((X.tilde*diag.ee.tilde), X.tilde)) ) %*% ((length(y.tilde))*ginv.XX.tilde)
+        
+        
+        ## Omega.hat for FE
+        
+        Omega.hat.fe.he <- OmegaHatHC(nrow(X.hat), ncol(X.hat), data$u.index, J.u, X.hat, u.hat)
+        Omega.hat.fe.he <- matrix(Omega.hat.fe.he, nrow = ncol(X.hat), ncol = ncol(X.hat))
+        ## Omega.hat.fe.he <- (1/(nrow(X.hat)-J.u-J.t-p+1)) * Omega.hat.fe.he
+        Omega.hat.fe.he <- (1/J.u) * Omega.hat.fe.he                
+        
+        ## Psi.hat.fe <- (nrow(X.hat)*ginv.XX.hat) %*% Omega.hat.fe.he %*% (nrow(X.hat)*ginv.XX.hat)
+        Psi.hat.fe <- (J.u*ginv.XX.hat) %*% Omega.hat.fe.he %*% (J.u*ginv.XX.hat)                
+        
+        ## Same as the following matrix multiplication
+        ## Psi.hat.fe <- (solve(XX.hat) %*% (1/d.f *(t(X.hat) %*% diag(diag(u.hat %*% t(u.hat))) %*% X.hat)) %*% solve(XX.hat))
+        
+        ## garbage collection
+        rm(Omega.hat.HC, Omega.hat.fe.he)
+        gc()
+        
+        
+      } else if ( (hetero.se == FALSE) & (auto.se == FALSE) ) {# indepdence and homoskedasticity
+        
+        stop("Please set hetero.se == TRUE & auto.se == TRUE when you run two-way FE")
+        
+        ## std.error <- "Homoskedastic Standard Error"
+=======
         nc <- ncol(wdm.Data)
 
         ## unique number of units and time with positive weights
@@ -359,6 +519,7 @@ wfe <- function (formula, data, treat = "treat.name",
         }
         
 
+>>>>>>> d6da253efab70d46c450a4b2f27e2f27bc8b3f88
         
         ## change formula without intercept
         a <- unlist(strsplit(as.character(formula), "~"))
@@ -373,6 +534,60 @@ wfe <- function (formula, data, treat = "treat.name",
         ## V <- as.matrix(Data.wdm[,2:(nc-3)])
         ## coef2 <- ginv(crossprod(V, V))%*% crossprod(V, Data.wdm[,1])
         
+<<<<<<< HEAD
+      } else if ( (hetero.se == FALSE) & (auto.se == TRUE) ) {# Kiefer
+        stop ("Robust standard errors with autocorrelation and homoskedasiticy is not supported")
+      }
+      
+      
+      ## vcov of wfe model
+      ## vcov.wfe <- Psi.hat.wfe * (1/nrow(X.tilde))
+      vcov.wfe <- Psi.hat.wfe * (1/n.units)            
+      ## cat("dimension of vcov:", dim(vcov.wfe), "\n")
+      se.did <- as.double(Re(sqrt(diag(vcov.wfe))))
+      
+      ## ## check vcov of wfe model
+      ## vcov.wfe2 <- Psi.hat.wfe2 * (1/nrow(X.tilde))
+      ## se.did2 <- as.double(Re(sqrt(diag(vcov.wfe2))))
+      
+      ## cat("\nStd.errors for wfe:", se.did, se.did2, "\n")
+      
+      
+      ## vcov of standard fe model (note:already divided by J.u)
+      ## var.cov.fe <- Psi.hat.fe * (1/nrow(X.hat))
+      var.cov.fe <- Psi.hat.fe * (1/J.u)            
+      se.ols <- sqrt(diag(var.cov.fe))
+      
+      
+      
+      ## if (verbose) {
+      ##   cat("\nStd.error calculation done")
+      ##   flush.console()
+      ## }
+      
+      
+      ## e <- environment()
+      ## save(file = "temp.RData", list = ls(), env = e)
+      
+      
+      ### traditional one way fixed effect results
+      
+      
+      ## if (verbose) {
+      ##   cat("Traditional two-way fixed effect\n")
+      ##   print(summary(fit.ols))
+      ##   cat("Robust Standard errors for Standard FE \n")
+      ##   print(se.ols)
+      ##   flush.console()
+      ## }
+      
+      
+      
+      ### White (1980) Test: Theorem 4
+      
+      if (White == TRUE){
+=======
+>>>>>>> d6da253efab70d46c450a4b2f27e2f27bc8b3f88
         
         ## residuals
         
